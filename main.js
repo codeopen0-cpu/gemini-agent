@@ -10,10 +10,18 @@ app.whenReady().then(() => {
   globalShortcut.register('CommandOrControl+Shift+\\', () => {
     win.webContents.send('toggle-command-mode');
   });
+  globalShortcut.register('CommandOrControl+Shift+A', () => {
+    win.webContents.send('toggle-auto-send');
+  });
 });
 
 ipcMain.on('get-base-dir', (e) => { e.returnValue = __dirname; });
-ipcMain.handle('write-file', (e, path, content) => { fs.writeFileSync(path, content); return "Success"; });
+ipcMain.handle('write-file', (e, filePath, content) => {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, content);
+  return "Success";
+});
 ipcMain.handle('read-file', (e, path) => {
   const stat = fs.statSync(path);
   if (stat.isDirectory()) {

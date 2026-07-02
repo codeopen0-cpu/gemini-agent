@@ -1,6 +1,7 @@
 const { ipcRenderer } = require('electron');
 const BASE_DIR = ipcRenderer.sendSync('get-base-dir');
 let isCommandMode = false;
+let autoSend = true;
 const processed = new WeakSet();
 let streamTimer;
 let lastPasted = '';
@@ -33,11 +34,13 @@ function processText(text) {
                     input.focus();
                     input.innerText = full;
                     input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-                    setTimeout(() => {
-                        const sendBtn = document.querySelector('[aria-label="Send message"], [aria-label="Send"], button[class*="send"], button[data-testid*="send"]');
-                        if (sendBtn) { sendBtn.click(); return; }
-                        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-                    }, 300);
+                    if (autoSend) {
+                        setTimeout(() => {
+                            const sendBtn = document.querySelector('[aria-label="Send message"], [aria-label="Send"], button[class*="send"], button[data-testid*="send"]');
+                            if (sendBtn) { sendBtn.click(); return; }
+                            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                        }, 300);
+                    }
                 }
             }).catch(() => {});
         }
@@ -88,4 +91,8 @@ window.addEventListener('DOMContentLoaded', () => {
 ipcRenderer.on('toggle-command-mode', () => {
     isCommandMode = !isCommandMode;
     alert(`Command Mode: ${isCommandMode ? 'ENABLED' : 'DISABLED'}`);
+});
+ipcRenderer.on('toggle-auto-send', () => {
+    autoSend = !autoSend;
+    alert(`Auto-send: ${autoSend ? 'ON' : 'OFF'}`);
 });
