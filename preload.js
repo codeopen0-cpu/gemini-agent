@@ -2,7 +2,7 @@ const { ipcRenderer } = require('electron');
 const BASE_DIR = ipcRenderer.sendSync('get-base-dir');
 let isCommandMode = false;
 let autoSend = true;
-const processed = new WeakSet();
+const processedText = new WeakMap();
 let streamTimer;
 let lastPasted = '';
 
@@ -15,7 +15,9 @@ function processText(text) {
     const writeMatches = text.matchAll(/write:([^|]+?)\|([\s\S]+?)(?=write:|read:|$)/g);
     for (const m of writeMatches) {
         const filename = m[1].trim();
-        const content = m[2].trim();
+        let content = m[2].trim();
+        const commentMatch = content.match(/\n\n[A-Z][a-z]+?\s+(?:the|a|an|i|we|you|would|here|this|that|there|it|to)\b/);
+        if (commentMatch) content = content.slice(0, commentMatch.index);
         if (filename && content) {
             ipcRenderer.invoke('write-file', resolvePath(filename), content);
         }
@@ -60,10 +62,10 @@ function handleNode(node) {
         node = node.parentElement;
     }
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
-    if (processed.has(node)) return;
     const text = node.textContent || '';
     if (lastPasted && text.trim() === lastPasted) return;
-    processed.add(node);
+    if (processedText.get(node) === text) return;
+    processedText.set(node, text);
     processText(text);
 }
 
@@ -85,7 +87,7 @@ window.addEventListener('DOMContentLoaded', () => {
                         handleNode(m.target.parentElement);
                     }
                 });
-            }, 800);
+            }, 1500);
         }
     });
 
