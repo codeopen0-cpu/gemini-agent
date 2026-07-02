@@ -16,6 +16,7 @@ function processText(text) {
     for (const m of writeMatches) {
         const filename = m[1].trim();
         let content = m[2].trim();
+        content = content.replace(/^\.{4,}/gm, m => ' '.repeat(m.length));
         const commentMatch = content.match(/\n\n[A-Z][a-z]+?\s+(?:the|a|an|i|we|you|would|here|this|that|there|it|to)\b/);
         if (commentMatch) content = content.slice(0, commentMatch.index);
         if (filename && content) {
