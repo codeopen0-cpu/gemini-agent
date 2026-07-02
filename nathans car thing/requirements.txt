@@ -1,0 +1,6 @@
+torch
+ultrasonic
+paho-mqtt
+opencv-python
+numpy
+pyyaml
