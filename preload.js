@@ -21,29 +21,37 @@ function processText(text) {
         }
     }
 
-    const readMatch = text.match(/read:([^\n|]+?)(?=\s*write:|\s*read:|$)/);
-    if (readMatch) {
-        const filename = readMatch[1].trim();
+    const readMatches = text.matchAll(/read:([^\n|]+?)(?=\s*write:|\s*read:|$)/g);
+    const readFiles = [];
+    for (const m of readMatches) {
+        const filename = m[1].trim();
         if (filename && /[\\/.]/.test(filename) && filename.length < 200) {
-            ipcRenderer.invoke('read-file', resolvePath(filename)).then(content => {
-                const full = `${filename} | ${content}`;
-                if (full === lastPasted) return;
-                lastPasted = full;
-                const input = document.querySelector('[contenteditable]');
-                if (input) {
-                    input.focus();
-                    input.innerText = full;
-                    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-                    if (autoSend) {
-                        setTimeout(() => {
-                            const sendBtn = document.querySelector('[aria-label="Send message"], [aria-label="Send"], button[class*="send"], button[data-testid*="send"]');
-                            if (sendBtn) { sendBtn.click(); return; }
-                            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-                        }, 300);
-                    }
-                }
-            }).catch(() => {});
+            readFiles.push(filename);
         }
+    }
+    if (readFiles.length > 0) {
+        Promise.all(readFiles.map(f =>
+            ipcRenderer.invoke('read-file', resolvePath(f))
+                .then(content => `${f} | ${content}`)
+                .catch(() => null)
+        )).then(results => {
+            const full = results.filter(Boolean).join('\n');
+            if (!full || full === lastPasted) return;
+            lastPasted = full;
+            const input = document.querySelector('[contenteditable]');
+            if (input) {
+                input.focus();
+                input.innerText = full;
+                input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+                if (autoSend) {
+                    setTimeout(() => {
+                        const sendBtn = document.querySelector('[aria-label="Send message"], [aria-label="Send"], button[class*="send"], button[data-testid*="send"]');
+                        if (sendBtn) { sendBtn.click(); return; }
+                        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                    }, 300);
+                }
+            }
+        });
     }
 }
 
