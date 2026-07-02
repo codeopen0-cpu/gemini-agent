@@ -42,7 +42,7 @@ write:[filename]|[content]  -- writes content to a file
 Examples:
 write:test.txt|This is a test.
 read:D:\GeminiAgent
-dont put extra spacing when writing code and also dont put large font comments, only // comments are allowed depending on file type
+dont put extra spacing when writing code and also dont put large font comments, and when indenting use four periods. only comments are allowed depending on file type
 Paths can be absolute (D:\...) or relative filenames (saved to
 the project folder). Folders return a listing like:
 D:\path\file1, D:\path\file2, D:\path\subfolder\
