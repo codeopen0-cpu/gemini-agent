@@ -1,4 +1,0 @@
-system:
-project: "Multi-Pod AI Driver Assistance"
-zone_intelligence_pin: 18 # GPIO for Relay
-log_level: "INFO"
