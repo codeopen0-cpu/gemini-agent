@@ -25,7 +25,7 @@ function processText(text) {
     const readFiles = [];
     for (const m of readMatches) {
         const filename = m[1].trim();
-        if (filename && /[\\/.]/.test(filename) && filename.length < 200) {
+        if (filename && (/[\\/]|\.\w+/.test(filename) || (filename.length < 40 && !/\s/.test(filename))) && filename.length < 200) {
             readFiles.push(filename);
         }
     }

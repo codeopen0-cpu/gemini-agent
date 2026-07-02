@@ -1,0 +1,6 @@
+paho-mqtt2.1.0
+torch2.3.0
+ultralytics8.2.0
+opencv-python-headless4.9.0
+rpi-gpio0.7.1
+numpy1.26.0
