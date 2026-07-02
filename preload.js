@@ -21,10 +21,10 @@ function processText(text) {
         }
     }
 
-    const readMatch = text.match(/read:([^\n|]+)/);
+    const readMatch = text.match(/read:([^\n|]+?)(?=\s*write:|\s*read:|$)/);
     if (readMatch) {
         const filename = readMatch[1].trim();
-        if (filename) {
+        if (filename && /[\\/.]/.test(filename) && filename.length < 200) {
             ipcRenderer.invoke('read-file', resolvePath(filename)).then(content => {
                 const full = `${filename} | ${content}`;
                 if (full === lastPasted) return;
