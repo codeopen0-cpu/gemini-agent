@@ -12,7 +12,7 @@ function resolvePath(name) {
 }
 
 function processText(text) {
-    const writeMatches = text.matchAll(/write:(\S+?)\|([\s\S]+?)(?=write:|read:|$)/g);
+    const writeMatches = text.matchAll(/write:([^|]+?)\|([\s\S]+?)(?=write:|read:|$)/g);
     for (const m of writeMatches) {
         const filename = m[1].trim();
         const content = m[2].trim();
@@ -21,7 +21,7 @@ function processText(text) {
         }
     }
 
-    const readMatch = text.match(/read:(\S+)/);
+    const readMatch = text.match(/read:([^\n\[\]()]+)/);
     if (readMatch) {
         const filename = readMatch[1].trim();
         if (filename) {
