@@ -21,7 +21,7 @@ function processText(text) {
         }
     }
 
-    const readMatch = text.match(/read:([^\n\[\]()]+)/);
+    const readMatch = text.match(/read:([^\n|]+)/);
     if (readMatch) {
         const filename = readMatch[1].trim();
         if (filename) {
