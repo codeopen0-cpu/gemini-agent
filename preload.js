@@ -44,7 +44,7 @@ function processText(text) {
             const input = document.querySelector('[contenteditable]');
             if (input) {
                 input.focus();
-                input.innerText = full;
+                input.innerText = full.replace(/^  +/gm, m => '\xA0'.repeat(m.length));
                 input.dispatchEvent(new InputEvent('input', { bubbles: true }));
                 if (autoSend) {
                     setTimeout(() => {
