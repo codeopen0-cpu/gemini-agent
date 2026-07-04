@@ -36,10 +36,35 @@ ipcMain.handle('read-file', async (e, fileName) => {
         const stat = await fs.stat(targetPath);
         if (stat.isDirectory()) {
             const items = await fs.readdir(targetPath);
-            return items.join(', ');
+            return { type: 'dir', content: items.join(', ') };
         }
-        return await fs.readFile(targetPath, 'utf8');
+        const content = await fs.readFile(targetPath, 'utf8');
+        return { type: 'file', content, filePath: targetPath };
     } catch (err) {
-        return "File not found";
+        return { type: 'file', content: 'File not found', filePath: '' };
+    }
+});
+
+ipcMain.handle('upload-file', async (e, filePath) => {
+    try {
+        await win.webContents.debugger.attach('1.3');
+        const doc = await win.webContents.debugger.sendCommand('DOM.getDocument');
+        const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', {
+            nodeId: doc.root.nodeId,
+            selector: 'input[type="file"]'
+        });
+        if (!nodeId || nodeId === 0) {
+            win.webContents.debugger.detach();
+            return { success: false, error: 'No file input found' };
+        }
+        await win.webContents.debugger.sendCommand('DOM.setFileInputFiles', { files: [filePath], nodeId });
+        await win.webContents.executeJavaScript(`
+            document.querySelector('input[type="file"]').dispatchEvent(new Event('change', { bubbles: true }));
+        `);
+        win.webContents.debugger.detach();
+        return { success: true };
+    } catch (err) {
+        try { win.webContents.debugger.detach(); } catch (_) {}
+        return { success: false, error: err.message };
     }
 });

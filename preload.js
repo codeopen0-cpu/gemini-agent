@@ -3,11 +3,6 @@ let isCommandMode = false;
 let autoSend = true;
 let lastPasted = '';
 
-function resolvePath(name) {
-    if (/^[A-Za-z]:\\/.test(name)) return name;
-    return null;
-}
-
 async function processText(text) {
     const writeMatches = text.matchAll(/write:([^|]+?)\|([\s\S]+?)(?=write:|read:|$)/g);
     for (const m of writeMatches) {
@@ -22,32 +17,45 @@ async function processText(text) {
 
     const readMatches = text.matchAll(/read:([^\n|]+?)(?=\s*write:|\s*read:|$)/g);
     const readFiles = Array.from(readMatches).map(m => m[1].trim()).filter(f => f && f.length < 200);
-    if (readFiles.length > 0) {
-        const input = document.querySelector('[contenteditable]');
-        if (!input) return;
-        input.focus();
+    if (readFiles.length === 0) return;
 
-        const results = [];
-        for (const f of readFiles) {
-            const content = (await ipcRenderer.invoke('read-file', f)).replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n$/, '');
-            if (!content || content === 'File not found') continue;
-            if (content.includes(', ') && !content.includes('\n')) {
-                results.push(`read:${f}\n${content}`);
+    const input = document.querySelector('[contenteditable]');
+    if (!input) return;
+    input.focus();
+
+    let uploadedAny = false;
+    const textParts = [];
+    for (const f of readFiles) {
+        const result = await ipcRenderer.invoke('read-file', f);
+        if (!result || result.content === 'File not found') continue;
+
+        if (result.type === 'dir') {
+            textParts.push(`read:${f}\n${result.content}`);
+        } else if (result.type === 'file') {
+            const uploadResult = await ipcRenderer.invoke('upload-file', result.filePath);
+            if (uploadResult.success) {
+                uploadedAny = true;
             } else {
-                results.push(`read:${f}\n\`\`\`\n${content}\n\`\`\``);
+                const c = result.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n$/, '');
+                textParts.push(`read:${f}\n\`\`\`\n${c}\n\`\`\``);
             }
         }
-        const full = results.join('\n\n');
-        if (!full || full === lastPasted) return;
-        lastPasted = full;
-        input.innerText = full.replace(/^  +/gm, m => '\xA0'.repeat(m.length));
-        input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-        if (autoSend) {
-            setTimeout(() => {
-                const btn = document.querySelector('[aria-label="Send message"], [aria-label="Send"]');
-                if (btn) btn.click();
-            }, 500);
+    }
+
+    if (textParts.length > 0) {
+        const full = textParts.join('\n\n');
+        if (full !== lastPasted) {
+            lastPasted = full;
+            input.innerText = full.replace(/^  +/gm, m => '\xA0'.repeat(m.length));
+            input.dispatchEvent(new InputEvent('input', { bubbles: true }));
         }
+    }
+
+    if (autoSend) {
+        setTimeout(() => {
+            const btn = document.querySelector('[aria-label="Send message"], [aria-label="Send"]');
+            if (btn) btn.click();
+        }, uploadedAny ? 5000 : 500);
     }
 }
 
