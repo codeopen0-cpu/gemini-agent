@@ -29,7 +29,7 @@ async function processText(text) {
 
         const results = [];
         for (const f of readFiles) {
-            const content = await ipcRenderer.invoke('read-file', f);
+            const content = (await ipcRenderer.invoke('read-file', f)).replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n$/, '');
             if (!content || content === 'File not found') continue;
             if (content.includes(', ') && !content.includes('\n')) {
                 results.push(`read:${f}\n${content}`);
