@@ -27,22 +27,26 @@ async function processText(text) {
         if (!input) return;
         input.focus();
 
+        const results = [];
         for (const f of readFiles) {
             const content = await ipcRenderer.invoke('read-file', f);
-            if (content && content !== 'File not found') {
-                const name = f.replace(/^.*[/\\]/, '');
-                const file = new File([content], name, { type: 'text/plain' });
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                input.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+            if (!content || content === 'File not found') continue;
+            if (content.includes(', ') && !content.includes('\n')) {
+                results.push(`read:${f}\n${content}`);
+            } else {
+                results.push(`read:${f}\n\`\`\`\n${content}\n\`\`\``);
             }
         }
-
+        const full = results.join('\n\n');
+        if (!full || full === lastPasted) return;
+        lastPasted = full;
+        input.innerText = full.replace(/^  +/gm, m => '\xA0'.repeat(m.length));
+        input.dispatchEvent(new InputEvent('input', { bubbles: true }));
         if (autoSend) {
             setTimeout(() => {
                 const btn = document.querySelector('[aria-label="Send message"], [aria-label="Send"]');
                 if (btn) btn.click();
-            }, 1500);
+            }, 500);
         }
     }
 }
