@@ -46,6 +46,7 @@ async function processText(text) {
         if (commentMatch) content = content.slice(0, commentMatch.index);
         if (content) {
             await ipcRenderer.invoke('write-file', m[1].trim(), content);
+            await new Promise(r => setTimeout(r, 500));
         }
     }
 
