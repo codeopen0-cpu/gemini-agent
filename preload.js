@@ -11,26 +11,6 @@ function isAiResponse(node) {
     return false;
 }
 
-function pasteText(input, text) {
-    input.focus();
-    try {
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        const range = document.createRange();
-        range.selectNodeContents(input);
-        sel.addRange(range);
-        document.execCommand('delete');
-        document.execCommand('insertText', false, text);
-    } catch (_) {
-        input.innerText = text;
-    }
-    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-}
-
-function normalizeLineEndings(s) {
-    return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\n|\n$/g, '');
-}
-
 async function processText(text) {
     const writeMatches = text.matchAll(/write:([^|]+?)\|([\s\S]+?)(?=write:|read:|$)/g);
     for (const m of writeMatches) {
@@ -51,7 +31,6 @@ async function processText(text) {
     if (!input) return;
     input.focus();
 
-    let uploadedAny = false;
     const textParts = [];
     for (const f of readFiles) {
         const result = await ipcRenderer.invoke('read-file', f);
@@ -77,7 +56,7 @@ async function processText(text) {
         setTimeout(() => {
             const btn = document.querySelector('[aria-label="Send message"], [aria-label="Send"]');
             if (btn) btn.click();
-        }, uploadedAny ? 5000 : 500);
+        }, 500);
     }
 }
 
