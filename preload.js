@@ -73,8 +73,8 @@ async function processText(text) {
     if (textParts.length > 0) {
         const full = textParts.join('\n\n');
         if (full !== lastPasted) {
-            lastPasted = full;
             pasteText(input, full);
+            lastPasted = full;
         }
     }
 
