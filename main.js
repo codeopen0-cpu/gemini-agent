@@ -34,11 +34,16 @@ ipcMain.handle('write-file', async (e, filePath, content) => {
 
 ipcMain.handle('read-file', async (e, fileName) => {
     try {
-        const targetPath = path.isAbsolute(fileName) ? fileName : path.join(WORKSPACE, path.basename(fileName));
+        const targetPath = fileName === '.'
+            ? __dirname
+            : path.isAbsolute(fileName)
+                ? fileName
+                : path.join(WORKSPACE, path.basename(fileName));
         const stat = await fs.stat(targetPath);
         if (stat.isDirectory()) {
             const items = await fs.readdir(targetPath);
-            return { type: 'dir', content: items.join(', ') };
+            const fullPaths = items.map(i => path.join(targetPath, i));
+            return { type: 'dir', content: fullPaths.join(', ') };
         }
         const content = await fs.readFile(targetPath, 'utf8');
         return { type: 'file', content, filePath: targetPath };
@@ -58,36 +63,83 @@ ipcMain.handle('paste-text', async (e, text) => {
     }
 });
 
-ipcMain.handle('upload-file', async (e, filePath) => {
-    const fileName = path.basename(filePath);
+let uploadApi = null;
+ipcMain.handle('capture-upload-api', async () => {
     try {
         await win.webContents.debugger.attach();
-        const doc = await win.webContents.debugger.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
-        const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', {
-            nodeId: doc.root.nodeId,
-            selector: 'input[type="file"]'
+        await win.webContents.debugger.sendCommand('Network.enable');
+        uploadApi = await new Promise((resolve) => {
+            const timeout = setTimeout(() => resolve(null), 30000);
+            const handler = async (e, params) => {
+                const req = params.request;
+                if (req.method === 'POST' && (req.url.includes('upload') || req.url.includes('/files') || req.url.includes('/_/BardChatUi'))) {
+                    clearTimeout(timeout);
+                    win.webContents.debugger.off('Network.requestWillBeSent', handler);
+                    let body = null;
+                    try {
+                        const pd = await win.webContents.debugger.sendCommand('Network.getRequestPostData', { requestId: params.requestId });
+                        body = pd.postData ? pd.postData.slice(0, 2000) : null;
+                    } catch (_) {}
+                    win.webContents.debugger.detach();
+                    resolve({ url: req.url, headers: req.headers, method: req.method, bodySample: body });
+                }
+            };
+            win.webContents.debugger.on('Network.requestWillBeSent', handler);
         });
-        if (!nodeId || nodeId === 0) {
-            win.webContents.debugger.detach();
-            return { success: false, error: 'No file input' };
-        }
-        await win.webContents.debugger.sendCommand('DOM.setFileInputFiles', { files: [filePath], nodeId });
-        // Dispatch trusted change event via CDP (isTrusted=true)
-        const { result } = await win.webContents.debugger.sendCommand('Runtime.evaluate', {
-            expression: `(function(){function f(r){if(r.shadowRoot){let e=r.shadowRoot.querySelector('input[type="file"]');if(e)return e;for(const c of r.shadowRoot.children){const x=f(c);if(x)return x}}for(const c of r.children){const x=f(c);if(x)return x}return null}return f(document.body)})()`
-        });
-        if (result.objectId) {
-            await win.webContents.debugger.sendCommand('DOM.dispatchEvent', {
-                objectId: result.objectId,
-                type: 'change',
-                bubbles: true,
-                cancelable: true
-            });
-        }
-        win.webContents.debugger.detach();
-        return { success: true };
+        return { success: true, api: uploadApi };
     } catch (err) {
         try { win.webContents.debugger.detach(); } catch (_) {}
         return { success: false, error: err.message };
+    }
+});
+const { execSync } = require('child_process');
+function writeFileToClipboard(filePath) {
+    try {
+        const absPath = path.resolve(filePath);
+        const scriptPath = path.join(app.getPath('temp'), 'ga_clipboard.ps1');
+        const script = `
+Add-Type -AssemblyName System.Windows.Forms
+$files = New-Object Collections.Specialized.StringCollection
+$files.Add('${absPath.replace(/'/g, "''")}')
+[System.Windows.Forms.Clipboard]::SetFileDropList($files)
+`;
+        require('fs').writeFileSync(scriptPath, script, 'utf8');
+        execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`, { timeout: 10000, shell: true });
+        try { require('fs').unlinkSync(scriptPath); } catch (_) {}
+        return true;
+    } catch (_) { return false; }
+}
+
+ipcMain.handle('upload-file', async (e, filePath) => {
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            // Step 1: Write file to OS clipboard as native file drop (CF_HDROP)
+            if (!writeFileToClipboard(filePath)) {
+                if (attempt < maxRetries - 1) { await new Promise(r => setTimeout(r, 500)); continue; }
+                return { success: false, method: 'clipboard-write-failed' };
+            }
+
+            // Step 2: Focus chat input (best-effort, may fail if DOM is transitioning)
+            await new Promise(r => setTimeout(r, 100));
+            try {
+                await win.webContents.executeJavaScript(`document.querySelector('[contenteditable]')?.focus()`);
+            } catch (_) {}
+
+            // Step 3: Dispatch trusted paste
+            await new Promise(r => setTimeout(r, 200));
+            win.webContents.paste();
+
+            // Step 4: Give page time to process
+            await new Promise(r => setTimeout(r, 800));
+
+            return { success: true, method: 'clipboard-file-drop+paste' };
+        } catch (err) {
+            if (attempt < maxRetries - 1) {
+                await new Promise(r => setTimeout(r, 1000));
+                continue;
+            }
+            return { success: false, error: err.message, attempt };
+        }
     }
 });
