@@ -61,64 +61,33 @@ ipcMain.handle('paste-text', async (e, text) => {
 ipcMain.handle('upload-file', async (e, filePath) => {
     const fileName = path.basename(filePath);
     try {
-        const content = await fs.readFile(filePath, 'utf8');
-
-        // Try CDP to set file input (works across shadow DOM)
-        try {
-            await win.webContents.debugger.attach();
-            const doc = await win.webContents.debugger.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
-            const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', {
-                nodeId: doc.root.nodeId,
-                selector: 'input[type="file"]'
-            });
-            if (nodeId && nodeId !== 0) {
-                await win.webContents.debugger.sendCommand('DOM.setFileInputFiles', { files: [filePath], nodeId });
-                await win.webContents.executeJavaScript(`
-                    (function() {
-                        const el = document.querySelector('input[type="file"]');
-                        if (el) el.dispatchEvent(new Event('change', { bubbles: true }));
-                    })()
-                `);
-                win.webContents.debugger.detach();
-                return { success: true };
-            }
+        await win.webContents.debugger.attach();
+        const doc = await win.webContents.debugger.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
+        const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', {
+            nodeId: doc.root.nodeId,
+            selector: 'input[type="file"]'
+        });
+        if (!nodeId || nodeId === 0) {
             win.webContents.debugger.detach();
-        } catch (_) {
-            try { win.webContents.debugger.detach(); } catch (_2) {}
+            return { success: false, error: 'No file input' };
         }
-
-        // Fallback: synthetic drop on chat input area
-        const safeContent = JSON.stringify(content);
-        const safeName = JSON.stringify(fileName);
-        await win.webContents.executeJavaScript(`
-            (async function() {
-                function findDropTarget(root) {
-                    if (!root) return null;
-                    if (root.shadowRoot) {
-                        for (const sel of ['rich-textarea', '[contenteditable]', '.ql-editor']) {
-                            let el = root.shadowRoot.querySelector(sel);
-                            if (el) return el;
-                        }
-                        for (const child of root.shadowRoot.children) {
-                            const found = findDropTarget(child);
-                            if (found) return found;
-                        }
-                    }
-                    for (const child of root.children) {
-                        const found = findDropTarget(child);
-                        if (found) return found;
-                    }
-                    return null;
-                }
-                const target = findDropTarget(document.body) || document.body;
-                const file = new File([${safeContent}], ${safeName}, { type: 'text/plain' });
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                target.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
-            })()
-        `);
+        await win.webContents.debugger.sendCommand('DOM.setFileInputFiles', { files: [filePath], nodeId });
+        // Dispatch trusted change event via CDP (isTrusted=true)
+        const { result } = await win.webContents.debugger.sendCommand('Runtime.evaluate', {
+            expression: `(function(){function f(r){if(r.shadowRoot){let e=r.shadowRoot.querySelector('input[type="file"]');if(e)return e;for(const c of r.shadowRoot.children){const x=f(c);if(x)return x}}for(const c of r.children){const x=f(c);if(x)return x}return null}return f(document.body)})()`
+        });
+        if (result.objectId) {
+            await win.webContents.debugger.sendCommand('DOM.dispatchEvent', {
+                objectId: result.objectId,
+                type: 'change',
+                bubbles: true,
+                cancelable: true
+            });
+        }
+        win.webContents.debugger.detach();
         return { success: true };
     } catch (err) {
+        try { win.webContents.debugger.detach(); } catch (_) {}
         return { success: false, error: err.message };
     }
 });
