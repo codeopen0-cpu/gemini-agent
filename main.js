@@ -22,7 +22,8 @@ ipcMain.on('get-base-dir', (e) => { e.returnValue = WORKSPACE; });
 
 ipcMain.handle('write-file', async (e, filePath, content) => {
     try {
-        const targetPath = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE, path.basename(filePath));
+        const targetPath = path.isAbsolute(filePath) ? filePath : path.resolve(WORKSPACE, filePath);
+        if (!path.isAbsolute(filePath) && !targetPath.startsWith(WORKSPACE)) return { success: false, error: 'Path traversal denied' };
         const dir = path.dirname(targetPath);
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(targetPath, content, 'utf8');
@@ -38,7 +39,10 @@ ipcMain.handle('read-file', async (e, fileName) => {
             ? __dirname
             : path.isAbsolute(fileName)
                 ? fileName
-                : path.join(WORKSPACE, path.basename(fileName));
+                : path.resolve(WORKSPACE, fileName);
+        if (!path.isAbsolute(fileName) && fileName !== '.' && !targetPath.startsWith(WORKSPACE)) {
+            return { type: 'file', content: 'Path traversal denied', filePath: '' };
+        }
         const stat = await fs.stat(targetPath);
         if (stat.isDirectory()) {
             const items = await fs.readdir(targetPath);
