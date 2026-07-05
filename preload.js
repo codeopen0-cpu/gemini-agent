@@ -13,13 +13,17 @@ function isAiResponse(node) {
 
 function pasteText(input, text) {
     input.focus();
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    const range = document.createRange();
-    range.selectNodeContents(input);
-    sel.addRange(range);
-    document.execCommand('delete');
-    document.execCommand('insertText', false, text);
+    try {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        sel.addRange(range);
+        document.execCommand('delete');
+        document.execCommand('insertText', false, text);
+    } catch (_) {
+        input.innerText = text;
+    }
     input.dispatchEvent(new InputEvent('input', { bubbles: true }));
 }
 
@@ -70,7 +74,7 @@ async function processText(text) {
         const full = textParts.join('\n\n');
         if (full !== lastPasted) {
             lastPasted = full;
-            pasteText(input, full.replace(/^  +/gm, m => '\xA0'.repeat(m.length)));
+            pasteText(input, full);
         }
     }
 
