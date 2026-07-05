@@ -60,13 +60,10 @@ async function processText(text) {
         if (result.type === 'dir') {
             textParts.push(`read:${f}\n${result.content}`);
         } else if (result.type === 'file') {
+            const c = normalizeLineEndings(result.content);
+            textParts.push(`read:${f}\n\`\`\`\n${c}\n\`\`\``);
             const uploadResult = await ipcRenderer.invoke('upload-file', result.filePath);
-            if (uploadResult.success) {
-                uploadedAny = true;
-            } else {
-                const c = normalizeLineEndings(result.content);
-                textParts.push(`read:${f}\n\`\`\`\n${c}\n\`\`\``);
-            }
+            if (uploadResult.success) uploadedAny = true;
         }
     }
 
