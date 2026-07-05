@@ -39,7 +39,10 @@ async function processText(text) {
         if (result.type === 'dir') {
             textParts.push(`read:${f}\n${result.content}`);
         } else if (result.type === 'file') {
-            await ipcRenderer.invoke('upload-file', result.filePath);
+            const c = result.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n+$/, '');
+            textParts.push(`read:${f}\n\`\`\`\n${c}\n\`\`\``);
+            // Also attempt CDP upload silently (best-effort)
+            ipcRenderer.invoke('upload-file', result.filePath);
         }
     }
 
@@ -66,6 +69,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (!isCommandMode) return;
         for (const m of mutations) {
             if (m.type === 'childList') {
+                clearTimeout(streamTimer);
                 m.addedNodes.forEach(n => {
                     if (n.nodeType === Node.ELEMENT_NODE && isAiResponse(n)) {
                         processText(n.textContent);
