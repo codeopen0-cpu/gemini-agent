@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 
@@ -42,8 +42,18 @@ ipcMain.handle('read-file', async (e, fileName) => {
         }
         const content = await fs.readFile(targetPath, 'utf8');
         return { type: 'file', content, filePath: targetPath };
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('paste-text', async (e, text) => {
+    try {
+        clipboard.writeText(text);
+        await new Promise(r => setTimeout(r, 100));
+        if (win && win.webContents) win.webContents.paste();
+        return { success: true };
     } catch (err) {
-        return { type: 'file', content: 'File not found', filePath: '' };
+        return { success: false, error: err.message };
     }
 });
 

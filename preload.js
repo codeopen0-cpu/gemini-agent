@@ -73,7 +73,8 @@ async function processText(text) {
     if (textParts.length > 0) {
         const full = textParts.join('\n\n');
         if (full !== lastPasted) {
-            pasteText(input, full);
+            input.focus();
+            await ipcRenderer.invoke('paste-text', full);
             lastPasted = full;
         }
     }
