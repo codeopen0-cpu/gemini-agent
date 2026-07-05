@@ -23,6 +23,8 @@ ipcMain.on('get-base-dir', (e) => { e.returnValue = WORKSPACE; });
 ipcMain.handle('write-file', async (e, filePath, content) => {
     try {
         const targetPath = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE, path.basename(filePath));
+        const dir = path.dirname(targetPath);
+        await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(targetPath, content, 'utf8');
         return { success: true };
     } catch (err) {
@@ -46,25 +48,66 @@ ipcMain.handle('read-file', async (e, fileName) => {
 });
 
 ipcMain.handle('upload-file', async (e, filePath) => {
+    const fileName = path.basename(filePath);
     try {
-        await win.webContents.debugger.attach('1.3');
-        const doc = await win.webContents.debugger.sendCommand('DOM.getDocument');
-        const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', {
-            nodeId: doc.root.nodeId,
-            selector: 'input[type="file"]'
-        });
-        if (!nodeId || nodeId === 0) {
+        const content = await fs.readFile(filePath, 'utf8');
+
+        // Try CDP to set file input (works across shadow DOM)
+        try {
+            await win.webContents.debugger.attach();
+            const doc = await win.webContents.debugger.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
+            const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', {
+                nodeId: doc.root.nodeId,
+                selector: 'input[type="file"]'
+            });
+            if (nodeId && nodeId !== 0) {
+                await win.webContents.debugger.sendCommand('DOM.setFileInputFiles', { files: [filePath], nodeId });
+                await win.webContents.executeJavaScript(`
+                    (function() {
+                        const el = document.querySelector('input[type="file"]');
+                        if (el) el.dispatchEvent(new Event('change', { bubbles: true }));
+                    })()
+                `);
+                win.webContents.debugger.detach();
+                return { success: true };
+            }
             win.webContents.debugger.detach();
-            return { success: false, error: 'No file input found' };
+        } catch (_) {
+            try { win.webContents.debugger.detach(); } catch (_2) {}
         }
-        await win.webContents.debugger.sendCommand('DOM.setFileInputFiles', { files: [filePath], nodeId });
+
+        // Fallback: synthetic drop on chat input area
+        const safeContent = JSON.stringify(content);
+        const safeName = JSON.stringify(fileName);
         await win.webContents.executeJavaScript(`
-            document.querySelector('input[type="file"]').dispatchEvent(new Event('change', { bubbles: true }));
+            (async function() {
+                function findDropTarget(root) {
+                    if (!root) return null;
+                    if (root.shadowRoot) {
+                        for (const sel of ['rich-textarea', '[contenteditable]', '.ql-editor']) {
+                            let el = root.shadowRoot.querySelector(sel);
+                            if (el) return el;
+                        }
+                        for (const child of root.shadowRoot.children) {
+                            const found = findDropTarget(child);
+                            if (found) return found;
+                        }
+                    }
+                    for (const child of root.children) {
+                        const found = findDropTarget(child);
+                        if (found) return found;
+                    }
+                    return null;
+                }
+                const target = findDropTarget(document.body) || document.body;
+                const file = new File([${safeContent}], ${safeName}, { type: 'text/plain' });
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                target.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+            })()
         `);
-        win.webContents.debugger.detach();
         return { success: true };
     } catch (err) {
-        try { win.webContents.debugger.detach(); } catch (_) {}
         return { success: false, error: err.message };
     }
 });
