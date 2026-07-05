@@ -42,7 +42,8 @@ ipcMain.handle('read-file', async (e, fileName) => {
         }
         const content = await fs.readFile(targetPath, 'utf8');
         return { type: 'file', content, filePath: targetPath };
-        return { success: false, error: err.message };
+    } catch (err) {
+        return { type: 'file', content: 'File not found', filePath: '' };
     }
 });
 
