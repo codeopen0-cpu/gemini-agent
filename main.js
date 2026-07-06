@@ -47,7 +47,7 @@ ipcMain.handle('read-file', async (e, fileName) => {
         if (stat.isDirectory()) {
             const items = await fs.readdir(targetPath);
             const fullPaths = items.map(i => path.join(targetPath, i));
-            return { type: 'dir', content: fullPaths.join(', ') };
+            return { type: 'dir', content: fullPaths.join('\n') };
         }
         const content = await fs.readFile(targetPath, 'utf8');
         return { type: 'file', content, filePath: targetPath };
